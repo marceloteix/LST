@@ -97,7 +97,7 @@ var lst = termica.expression(
   '(TB / (1 + (0.00115 * (TB / 1.438)) * log(em))) - 273.15', {
     'TB': termica.select('termica'), // Seleciona a banda térmica (TB)
     'em': em // Atribui a emissividade (em)
-  }).rename('LST Yogyakarta 2023');
+  }).rename('LST C°');
 
 // Adiciona a camada LST ao mapa com parâmetros de visualização personalizados
 Map.addLayer(lst, {
