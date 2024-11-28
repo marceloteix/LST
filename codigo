@@ -1,0 +1,191 @@
+var dataInicio = '2022-06-01'; //altere aqui a data de inicío (ano-mês-dia)
+var dataFim = '2023-06-21'; //altere aqui a data final (ano-mês-dia)
+
+// seleção da imagem
+var imagem = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
+                          .filterBounds(geometry)
+                          .filterDate(dataInicio, dataFim)
+                          .map(aplicarFatoresDeEscala)
+                          .map(mascararNuvens)
+                          .median()
+                          .clip(geometry);
+
+// Aplica fatores de escala.
+function aplicarFatoresDeEscala(imagem) {
+  // Valores de escala e offset para bandas ópticas
+  var bandasOpticas = imagem.select('SR_B.').multiply(0.0000275).add(-0.2);
+  
+  // Valores de escala e offset para bandas térmicas
+  var bandasTermicas = imagem.select('ST_B.*').multiply(0.00341802).add(149.0);
+  
+  // Adiciona as bandas escaladas à imagem original
+  return imagem.addBands(bandasOpticas, null, true)
+    .addBands(bandasTermicas, null, true);
+}
+
+// Função para mascarar nuvens e sombras de nuvens em imagens do Landsat 8
+function mascararNuvens(imagem) {
+  // Define as máscaras de nuvem e sombra de nuvem (Bits 3 e 5)
+  var mascaraSombraNuvem = (1 << 3);
+  var mascaraNuvem = (1 << 5);
+
+  // Seleciona a banda de Qualidade de Pixel (QA) para informações de qualidade do pixel
+  var qa = imagem.select('QA_PIXEL');
+
+  // Cria uma máscara binária para identificar condições claras (ambos os bits de nuvem e sombra de nuvem definidos como 0)
+  var mascara = qa.bitwiseAnd(mascaraSombraNuvem).eq(0)
+                    .and(qa.bitwiseAnd(mascaraNuvem).eq(0));
+
+  // Atualiza a imagem original, mascarando os pixels afetados por nuvem e sombra de nuvem
+  return imagem.updateMask(mascara);
+}
+
+
+// Define parâmetros de visualização para imagens em Cor Verdadeira (bandas 4, 3 e 2)
+var visualizacao = {
+  bands: ['SR_B4', 'SR_B3', 'SR_B2'],
+  min: 0.0,
+  max: 0.15,
+};
+
+Map.addLayer(imagem, visualizacao, 'Cor Verdadeira 432');
+
+// Calcula o Índice de Vegetação por Diferença Normalizada (NDVI)
+var ndvi = imagem.normalizedDifference(['SR_B5', 'SR_B4']).rename('NDVI');
+
+// Define parâmetros de visualização para o NDVI
+var paletaNDVI = {
+  min: -1,
+  max: 1,
+  palette: ['blue', 'white', 'green']
+};
+
+
+// Calcula o valor mínimo do NDVI dentro da geometria
+var ndviMin = ee.Number(ndvi.reduceRegion({
+  reducer   : ee.Reducer.min(),
+  geometry  : geometry,
+  scale     : 30,
+  maxPixels : 1e9
+}).values().get(0));
+
+// Calcula o valor máximo do NDVI dentro da geometria
+var ndviMax = ee.Number(ndvi.reduceRegion({
+  reducer   : ee.Reducer.max(),
+  geometry  : geometry,
+  scale     : 30,
+  maxPixels : 1e9
+}).values().get(0));
+
+// Cálculo da Fração de Vegetação (FV)
+// Fórmula: ((NDVI - NDVI_min) / (NDVI_max - NDVI_min))^2
+var fv = ((ndvi.subtract(ndviMin)).divide(ndviMax.subtract(ndviMin)))
+          .pow(ee.Number(2))
+          .rename('FV');
+
+// Cálculo da Emissividade
+// Fórmula: 0.004 * FV + 0.986
+var em = fv.multiply(ee.Number(0.004)).add(ee.Number(0.986)).rename('EM');
+
+// Seleciona a Banda Térmica (Banda 10) e Renomeia
+var termica = imagem.select('ST_B10').rename('termica');
+
+// Agora, vamos calcular a temperatura da superfície terrestre (LST)
+
+// Fórmula: (TB / (1 + (λ * (TB / 1.438)) * ln(em))) - 273.15
+var lst = termica.expression(
+  '(TB / (1 + (0.00115 * (TB / 1.438)) * log(em))) - 273.15', {
+    'TB': termica.select('termica'), // Seleciona a banda térmica (TB)
+    'em': em // Atribui a emissividade (em)
+  }).rename('LST Yogyakarta 2023');
+
+// Adiciona a camada LST ao mapa com parâmetros de visualização personalizados
+Map.addLayer(lst, {
+  min: 18.47, // Valor mínimo de LST
+  max: 42.86, // Valor máximo de LST
+  palette: [
+    '040274', '040281', '0502a3', '0502b8', '0502ce', '0502e6',
+    '0602ff', '235cb1', '307ef3', '269db1', '30c8e2', '32d3ef',
+    '3be285', '3ff38f', '86e26f', '3ae237', 'b5e22e', 'd6e21f',
+    'fff705', 'ffd611', 'ffb613', 'ff8b13', 'ff6e08', 'ff500d',
+    'ff0000', 'de0101', 'c21301', 'a71001', '911003'
+  ]}, 'Temperatura da Superfície Terrestre 2023');
+
+// Cria uma legenda contínua para a Temperatura da Superfície Terrestre (LST)
+var minLST = 15; // Valor mínimo de LST
+var maxLST = 45; // Valor máximo de LST
+
+// Cria um painel para a legenda com estilo
+var legenda = ui.Panel({
+  style: {
+    position: 'bottom-right',
+    padding: '8px 15px',
+    backgroundColor: 'white'
+  }
+});
+
+// Cria um título para a legenda
+var tituloLegenda = ui.Label({
+  value: 'Temperatura da Superfície Terrestre (°C)',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '20px',
+    margin: '0 0 4px 0',
+    padding: '0'
+  }
+});
+
+// Adiciona o título da legenda ao painel da legenda
+legenda.add(tituloLegenda);
+
+// Define a paleta de cores com uma transição mais suave
+var paleta = [
+  '040274', '040281', '0502a3', '0602ff', '3be285', '32d3ef', '3ff38f', 'b5e22e', 
+  'fff705', 'ff8b13', 'ff0000', 'c21301', '911003'
+];
+
+// Calcula o valor do passo para a legenda
+var passo = (maxLST - minLST) / (paleta.length - 1);
+
+// Loop através da paleta e cria entradas para a legenda
+for (var i = 0; i < paleta.length; i++) {
+  // Cria uma caixa de cor para cada entrada da legenda
+  var caixaCor = ui.Label({
+    style: {
+      backgroundColor: '#' + paleta[i],
+      padding: '8px',
+      margin: '0 0 8px 0',
+      width: '42px'
+    }
+  });
+
+  // Cria um rótulo com os valores de LST para cada entrada da legenda
+  var rótuloLegenda = ui.Label({
+    value: (minLST + i * passo).toFixed(2),
+    style: { margin: '0 0 10px 6px' }
+  });
+
+  // Cria um painel para organizar a caixa de cor e o rótulo horizontalmente
+  var painelLegenda = ui.Panel({
+    widgets: [caixaCor, rótuloLegenda],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+
+  // Adiciona o painel de entrada da legenda ao painel principal
+  legenda.add(painelLegenda);
+}
+
+// Adiciona a legenda ao mapa do Google Earth Engine
+Map.add(legenda);
+
+// exportar a imagem
+var exportImg = lst.clip(geometry);
+Export.image.toDrive({
+  image: exportImg, 
+  description: 'LST', 
+  folder: 'LST', 
+  fileNamePrefix: 'LST', 
+  scale: 30, 
+  crs: 'EPSG:4674', 
+  maxPixels: 1e13
+});
