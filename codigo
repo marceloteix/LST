@@ -15,17 +15,17 @@ function aplicarFatoresDeEscala(imagem) {
   // Valores de escala e offset para bandas ópticas
   var bandasOpticas = imagem.select('SR_B.').multiply(0.0000275).add(-0.2);
   
-  // Valores de escala e offset para bandas térmicas
+  // Valores de escala para bandas térmicas
   var bandasTermicas = imagem.select('ST_B.*').multiply(0.00341802).add(149.0);
   
-  // Adiciona as bandas escaladas à imagem original
+  // Adiciona as bandas à imagem original
   return imagem.addBands(bandasOpticas, null, true)
     .addBands(bandasTermicas, null, true);
 }
 
 // Função para mascarar nuvens e sombras de nuvens em imagens do Landsat 8
 function mascararNuvens(imagem) {
-  // Define as máscaras de nuvem e sombra de nuvem (Bits 3 e 5)
+  // Define as máscaras de nuvem e sombra de nuvem 
   var mascaraSombraNuvem = (1 << 3);
   var mascaraNuvem = (1 << 5);
 
