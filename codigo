@@ -1,5 +1,5 @@
-var dataInicio = '2022-06-01'; //altere aqui a data de inicío (ano-mês-dia)
-var dataFim = '2023-06-21'; //altere aqui a data final (ano-mês-dia)
+var dataInicio = '2022-12-01'; //altere aqui a data de inicío (ano-mês-dia)
+var dataFim = '2023-03-21'; //altere aqui a data final (ano-mês-dia)
 
 // seleção da imagem
 var imagem = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
