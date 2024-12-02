@@ -144,8 +144,8 @@ var paleta = [
   'fff705', 'ff8b13', 'ff0000', 'c21301', '911003'
 ];
 
-// Calcula o valor do passo para a legenda
-var passo = (maxLST - minLST) / (paleta.length - 1);
+// Calcula o valor para a legenda
+var legvalor = (maxLST - minLST) / (paleta.length - 1);
 
 // Loop através da paleta e cria entradas para a legenda
 for (var i = 0; i < paleta.length; i++) {
@@ -161,7 +161,7 @@ for (var i = 0; i < paleta.length; i++) {
 
   // Cria um rótulo com os valores de LST para cada entrada da legenda
   var rótuloLegenda = ui.Label({
-    value: (minLST + i * passo).toFixed(2),
+    value: (minLST + i * legvalor).toFixed(2),
     style: { margin: '0 0 10px 6px' }
   });
 
